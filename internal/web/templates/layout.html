@@ -1,11 +1,15 @@
 {{define "head"}}
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="{{.Theme}}">
 <head>
   <script>
     (function () {
+      var scheme = (document.cookie.match(/(?:^|; )color_scheme=(\w+)/) || [])[1] || 'system';
       var mq = matchMedia('(prefers-color-scheme: dark)');
-      var apply = function () { document.documentElement.classList.toggle('dark', mq.matches); };
+      var apply = function () {
+        var dark = scheme === 'dark' || (scheme === 'system' && mq.matches);
+        document.documentElement.classList.toggle('dark', dark);
+      };
       apply(); mq.addEventListener('change', apply);
     })();
   </script>
@@ -27,15 +31,20 @@
 <aside class="sidebar" data-side="left" aria-hidden="false">
   <nav aria-label="Sidebar">
     <header>
-      <a href="/" class="btn-ghost p-2 h-14 w-full justify-start">
-        <span class="bg-primary text-primary-foreground flex aspect-square size-10 items-center justify-center rounded-lg">
-          <i data-lucide="brick-wall-shield" class="size-6"></i>
-        </span>
-        <span class="grid flex-1 text-left leading-tight">
-          <span class="truncate font-medium">scrutineer</span>
-          <span class="truncate text-xs text-muted-foreground">local</span>
-        </span>
-      </a>
+      <div class="flex items-center w-full gap-1">
+        <a href="/" class="btn-ghost p-2 h-14 flex-1 justify-start">
+          <span class="bg-primary text-primary-foreground flex aspect-square size-10 items-center justify-center rounded-lg">
+            <i data-lucide="brick-wall-shield" class="size-6"></i>
+          </span>
+          <span class="grid flex-1 text-left leading-tight">
+            <span class="truncate font-medium">scrutineer</span>
+            <span class="truncate text-xs text-muted-foreground">local</span>
+          </span>
+        </a>
+        <a href="/settings" class="btn-ghost p-2 size-10 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground" data-tooltip="Settings">
+          <i data-lucide="settings" class="size-4"></i>
+        </a>
+      </div>
     </header>
     <section>
       <div role="group">

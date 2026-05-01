@@ -126,6 +126,18 @@ func New(gdb *gorm.DB, q *queue.Queue, log *slog.Logger, broker *Broker, w *work
 			}
 			return s
 		},
+		"bytes": func(b int64) string {
+			const unit = 1024
+			if b < unit {
+				return fmt.Sprintf("%d B", b)
+			}
+			div, exp := int64(unit), 0
+			for n := b / unit; n >= unit; n /= unit {
+				div *= unit
+				exp++
+			}
+			return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+		},
 	}
 	t, err := template.New("").Funcs(funcs).ParseFS(tmplFS, "templates/*.html")
 	if err != nil {
@@ -186,6 +198,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /skills/{id}/edit", s.skillEdit)
 	mux.HandleFunc("POST /skills/{id}", s.skillUpdate)
 	mux.HandleFunc("POST /repositories/{id}/skill-scan", s.skillRun)
+	mux.HandleFunc("GET /settings", s.settingsShow)
+	mux.HandleFunc("POST /settings/theme", s.settingsUpdateTheme)
+	mux.HandleFunc("POST /settings/model", s.settingsUpdateModel)
+	mux.HandleFunc("POST /settings/color-scheme", s.settingsUpdateColorScheme)
 
 	// API routes get bearer-auth middleware and skip the browser CSRF checks;
 	// skills call these from inside a scan workspace, not from a browser.
@@ -203,6 +219,8 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 		data = map[string]any{}
 	}
 	data["Nav"] = navKey(r.URL.Path)
+	data["Theme"] = resolveTheme(r)
+	data["ColorScheme"] = resolveColorScheme(r)
 	data["Flash"] = popFlash(w, r)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, name, data); err != nil {
@@ -254,7 +272,7 @@ func popFlash(w http.ResponseWriter, r *http.Request) *Flash {
 // index, which is also the home page.
 func navKey(path string) string {
 	for _, p := range []struct{ prefix, key string }{
-		{"/usage", "usage"}, {"/skills", "skills"}, {"/maintainers", "maintainers"},
+		{"/settings", "settings"}, {"/usage", "usage"}, {"/skills", "skills"}, {"/maintainers", "maintainers"},
 		{"/orgs", "orgs"}, {"/packages", "packages"}, {"/advisories", "advisories"},
 		{"/findings", "findings"}, {"/scans", "scans"}, {"/sboms", "sboms"},
 	} {

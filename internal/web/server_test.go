@@ -1794,6 +1794,86 @@ func TestScanShowRenders(t *testing.T) {
 	}
 }
 
+func TestSettingsShow_rendersThemeOptions(t *testing.T) {
+	s, done := newTestServer(t)
+	defer done()
+
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, localReq("GET", "/settings"))
+	if w.Code != 200 {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	body := w.Body.String()
+	for _, theme := range []string{"claude", "ocean-breeze", "catppuccin", "sunset-horizon", "midnight-bloom", "northern-lights"} {
+		if !strings.Contains(body, `value="`+theme+`"`) {
+			t.Errorf("settings page missing theme option %q", theme)
+		}
+	}
+}
+
+func TestSettingsUpdateTheme_setsCookie(t *testing.T) {
+	s, done := newTestServer(t)
+	defer done()
+
+	form := url.Values{"theme": {"catppuccin"}}
+	req := httptest.NewRequest("POST", "/settings/theme", strings.NewReader(form.Encode()))
+	req.Host = testHost
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+
+	var found bool
+	for _, sc := range w.Header().Values("Set-Cookie") {
+		if strings.HasPrefix(sc, "theme=catppuccin") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("theme cookie not set; cookies: %v", w.Header().Values("Set-Cookie"))
+	}
+}
+
+func TestSettingsUpdateTheme_rejectsInvalid(t *testing.T) {
+	s, done := newTestServer(t)
+	defer done()
+
+	form := url.Values{"theme": {"nope"}}
+	req := httptest.NewRequest("POST", "/settings/theme", strings.NewReader(form.Encode()))
+	req.Host = testHost
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("want 422 for invalid theme, got %d", w.Code)
+	}
+}
+
+func TestThemeCookie_appliedToRenderedPage(t *testing.T) {
+	s, done := newTestServer(t)
+	defer done()
+
+	req := localReq("GET", "/")
+	req.AddCookie(&http.Cookie{Name: "theme", Value: "ocean-breeze"})
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("status %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `data-theme="ocean-breeze"`) {
+		t.Error("theme cookie not reflected in data-theme attribute")
+	}
+}
+
+func TestNavKey_settings(t *testing.T) {
+	if got := navKey("/settings"); got != "settings" {
+		t.Errorf("navKey(/settings) = %q, want settings", got)
+	}
+}
+
 func TestMaintainerShow_displaysFindingStatus(t *testing.T) {
 	s, done := newTestServer(t)
 	defer done()
