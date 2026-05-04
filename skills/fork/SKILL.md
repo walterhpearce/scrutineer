@@ -89,9 +89,9 @@ If the workspace clone is shallow `git push` may need `git -C ./src fetch --unsh
 
 ## 4. File draft advisories for findings
 
-Fetch the repository's findings: `GET {api_base}/repositories/{repository_id}/findings` with `Authorization: Bearer {token}`. Filter to findings whose `status` is `ready` — those have been through verify and disclose and have a `disclosure_draft`. If none are `ready`, record `"advisories": []` and skip to step 5.
+Fetch the repository's findings: `GET {api_base}/repositories/{repository_id}/findings` with `Authorization: Bearer {token}`. File an advisory for every finding whose `status` is one of `new`, `enriched`, `triaged`, or `ready` — that is, anything that has not already been reported upstream or closed out. Skip `reported`, `acknowledged`, `fixed`, `published`, `rejected`, and `duplicate`; record those under `"skipped_advisories"` with the status as the reason. If nothing is left, record `"advisories": []` and skip to step 5.
 
-For each ready finding fetch the full record (`GET {api_base}/findings/{id}`) so you have `disclosure_draft`, `cvss_vector`, `cwe`, `affected`, and `title`.
+For each remaining finding fetch the full record (`GET {api_base}/findings/{id}`) so you have `disclosure_draft`, `cvss_vector`, `cwe`, `affected`, and `title`.
 
 Before filing, list the advisories already on the fork so re-runs do not duplicate:
 
@@ -122,13 +122,56 @@ The body shape is the GHSA report schema:
 }
 ```
 
-Build `vulnerabilities` from `GET {api_base}/repositories/{repository_id}/packages` using the same ecosystem mapping the disclose skill uses (rubygems, npm, pip, maven, nuget, composer, go, rust, erlang, actions, pub, other). If the repository has no packages, send `"vulnerabilities": [{"package": {"ecosystem": "other", "name": "{owner}/{repo}"}}]` — the endpoint requires at least one entry. If `disclosure_draft` is empty, fall back to a short description assembled from the finding's `location`, `cwe`, and `severity`; note in `notes` that disclose has not run on that finding.
+Build `vulnerabilities` from `GET {api_base}/repositories/{repository_id}/packages` using the same ecosystem mapping the disclose skill uses (rubygems, npm, pip, maven, nuget, composer, go, rust, erlang, actions, pub, other). If the repository has no packages, send `"vulnerabilities": [{"package": {"ecosystem": "other", "name": "{owner}/{repo}"}}]` — the endpoint requires at least one entry.
+
+If `disclosure_draft` is empty the disclose skill has not run on this finding yet. Assemble the description yourself from the finding's six-step prose (the full `GET {api_base}/findings/{id}` response includes `trace`, `boundary`, `validation`, `prior_art`, `reach`, `rating` even for `new` findings). Use this template, dropping any section whose source field is empty:
+
+```
+> Draft staged by scrutineer from finding {finding_id} (scan {scan_id}). Not yet reviewed by an analyst.
+
+## Summary
+
+{title}. {first sentence of rating, or "Severity: {severity}" if rating is empty}.
+
+## Location
+
+`{location}` on `{owner}/{repo}`.
+
+## Details
+
+{trace}
+
+## Trigger
+
+{boundary}
+
+## Reproduction
+
+{validation}
+
+## Impact
+
+{rating}
+
+## Reach
+
+{reach}
+
+## References
+
+- {repository.html_url}/blob/{default_branch}/{location path without :line}
+- https://cwe.mitre.org/data/definitions/{n}.html  (one per CWE in finding.cwe)
+- {each URL that appears verbatim in prior_art}
+```
+
+Do not invent content for missing sections; the draft is allowed to be sparse. Note in `notes` that disclose has not run on that finding.
 
 Capture the `ghsa_id` and `html_url` from the response. Then write them back to scrutineer so the finding page links to the draft:
 
 - `POST {api_base}/findings/{id}/references` with `{"url": "<html_url>", "tags": "ghsa-draft", "summary": "Draft advisory on {fork_org} fork"}`
 - `POST {api_base}/findings/{id}/communications` with `{"channel": "ghsa", "direction": "outbound", "actor": "fork", "body": "Draft advisory <ghsa_id> opened on {fork_org}/{fork_name}"}`
-- `PATCH {api_base}/findings/{id}` with `{"fields": {"status": "reported"}, "by": "fork"}`
+
+Do not change the finding's `status`. `reported` means reported to the upstream maintainer; a draft on the staging fork is not that.
 
 ## 5. Invite a team
 
