@@ -29,7 +29,7 @@ Then open http://127.0.0.1:8080.
 
 Scrutineer detects Docker and starts using it automatically: each scan runs in an ephemeral container with a read-only source mount and an egress allowlist proxy. The runner image (`ghcr.io/alpha-omega-security/scrutineer-runner`) is pulled on first use, so the first scan is slower while it downloads. If Docker isn't available scans run directly on the host with no isolation; see the Security section before doing that.
 
-Click **Add repository** in the sidebar, paste a git HTTPS URL, and scrutineer enqueues the `triage` skill. Triage then enqueues the rest of the pipeline in parallel. Metadata and package lookups finish in seconds; the security deep-dive takes a few minutes depending on repo size. Open the repo page and switch to the Scans tab to watch progress, or wait for the Findings tab to fill in.
+Click **Add repository** in the sidebar, paste a git HTTPS URL, and scrutineer enqueues the `triage` skill. A `/tree/<branch>` suffix on the URL scans that branch instead of the default. Triage then enqueues the rest of the pipeline in parallel. Metadata and package lookups finish in seconds; the security deep-dive takes a few minutes depending on repo size. Open the repo page and switch to the Scans tab to watch progress, or wait for the Findings tab to fill in.
 
 The optional analysis tools (semgrep, zizmor, git-pkgs, brief) are bundled in the runner image, so you don't need them installed locally when Docker is in use.
 
@@ -66,7 +66,7 @@ When the containerised runner is active (the default when Docker is available), 
 - **Maintainer identification** -- model-backed skill combining commit history, issue/PR activity, and registry ownership to identify who to contact for disclosure
 - **CWE catalogue** -- embedded MITRE CWE data with tooltips on finding tables and full descriptions on finding pages
 - **Live updates** -- SSE streaming of scan logs and status changes, no polling
-- **Dark mode** -- follows system preference
+- **Themes** -- six colour themes plus a light/dark/system toggle, set on the Settings page
 - **Containerised runner** -- optional per-scan Docker isolation with read-only source mounts, dropped capabilities, and an authenticated egress allowlist proxy
 - **Skill HTTP API** -- running skills can call back into scrutineer to list prior scans and enqueue further skills; surface documented in `openapi.yaml`
 - **Organisation rollup** -- repos, findings, and maintainers grouped by owning org, with per-org markdown exports
@@ -74,7 +74,9 @@ When the containerised runner is active (the default when Docker is available), 
 - **SBOM import** -- upload a CycloneDX or SPDX document, resolve each component to a source repository, and queue scans automatically
 - **CNA matching** -- identify the CVE Numbering Authority whose scope covers a repo so disclosures go to the right contact
 - **Reachability analysis** -- trace sinks found in dependencies through application code to see which are actually reachable
-- **Rescan dedup** -- findings carry a content fingerprint so re-running a scan updates existing rows instead of creating duplicates
+- **Rescan dedup** -- findings carry a content fingerprint so re-running a scan updates existing rows instead of creating duplicates; findings that stop appearing are marked "not seen" with a miss count
+- **CSAF export** -- download any finding as a schema-validated CSAF 2.0 advisory document
+- **JSONL export** -- stream all findings or scans as line-delimited JSON for ingestion elsewhere
 - **Markdown report export** -- download a single consolidated `report.md` per repository or organisation
 
 ## The default pipeline
@@ -101,6 +103,7 @@ When a repo is added, the `triage` skill is enqueued. Its SKILL.md lists the ski
 | `patch` | Proposes a unified diff fixing one finding, written back as a note for analyst review |
 | `reachability` | Traces dependency sinks through application code to determine which are reachable from trust boundaries |
 | `cna-match` | Matches a repository to its CVE Numbering Authority so disclosures route to the right contact |
+| `posture` | Records the repo's security posture (reporting policy, response history, hardening) on the Repository row |
 
 Edit `skills/triage/SKILL.md` to change what gets run by default. Drop new skill directories in `skills/` to add scan types; no code changes needed.
 
@@ -110,6 +113,7 @@ A skill is a directory with a `SKILL.md` (YAML frontmatter + markdown body), opt
 
     scrutineer.output_file: report.json
     scrutineer.output_kind: findings
+    scrutineer.max_turns:   30
 
 The output kind picks the parser. Supported: `findings`, `maintainers`, `packages`, `advisories`, `dependents`, `dependencies`, `repo_metadata`, `freeform`. Skills without these metadata keys run and their output is captured verbatim.
 
@@ -133,6 +137,7 @@ Every index page has a search box plus filter and sort dropdowns; the specifics 
 - **Scans** -- every scan that has run. Running or queued scans can be cancelled; failed ones retried.
 - **Skills** -- installed skills from disk and from the UI; view, edit, or run any of them.
 - **Usage** -- token and cost totals across all scans, broken down by skill.
+- **Settings** -- theme, colour scheme, default model, and system stats (record counts, DB size, concurrency, paths).
 
 ## Finding workflow
 
@@ -215,7 +220,7 @@ The config file can also replace the model pick list and pin the default model:
 
 ## Security
 
-See [threatmodel.md](threatmodel.md) for the full threat model. The short version: scanning a repository is equivalent to running code from it. The containerised runner (when available) isolates each scan, but the default bare-metal mode runs everything as your user. Only scan repositories you'd be willing to clone and build locally.
+See [SECURITY.md](SECURITY.md) for the reporting policy and [threatmodel.md](threatmodel.md) for the full threat model. The short version: scanning a repository is equivalent to running code from it. The containerised runner (when available) isolates each scan, but the default bare-metal mode runs everything as your user. Only scan repositories you'd be willing to clone and build locally.
 
 ## Further documentation
 
