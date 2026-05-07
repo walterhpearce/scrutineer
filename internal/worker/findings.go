@@ -8,25 +8,13 @@ import (
 	"scrutineer/internal/db"
 )
 
-// scanReport mirrors the security-deep-dive skill's report schema. Report-
-// level fields like boundaries, inventory and ruled_out stay in the raw
-// JSON (Scan.Report); findings are extracted into db.Finding rows.
+// scanReport extracts only the findings array from a security-deep-dive
+// report. All other top-level fields (repository, artefact, boundaries,
+// inventory, ruled_out, ...) stay in the raw JSON on Scan.Report and are
+// never read here, so we do not declare them: a strict Go type on an unused
+// field turns model output variance into a fatal scan error (#172).
 type scanReport struct {
-	Repository    string          `json:"repository"`
-	Commit        string          `json:"commit"`
-	Artefact      string          `json:"artefact"`
-	SpecVersion   int             `json:"spec_version"`
-	Model         string          `json:"model"`
-	Date          string          `json:"date"`
-	FilesReviewed int             `json:"files_reviewed"`
-	Languages     []string        `json:"languages"`
-	Findings      []scanFinding   `json:"findings"`
-	RuledOut      json.RawMessage `json:"ruled_out"`
-	Inventory     json.RawMessage `json:"inventory"`
-	Boundaries    json.RawMessage `json:"boundaries"`
-
-	// Legacy fields from the old minimal schema (for backward compat)
-	Notes string `json:"notes"`
+	Findings []scanFinding `json:"findings"`
 }
 
 type scanFinding struct {

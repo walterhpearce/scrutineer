@@ -147,4 +147,4 @@ Record `quality_tier` per sink class. For memory safety: heap overflow, use-afte
 
 ## Output
 
-Write your report to `./report.json`. It must validate against `./schema.json`. Every inventory sink must appear either in `findings[].sinks` or in `ruled_out[].sinks`. Use `findings: []` for a clean report. Read `./context.json` for the repository url, default branch, and other host-provided facts if you need them for the `repository`, `commit`, and `artefact` fields. Set `spec_version` to `12`. Use today's date for the `date` field.
+Write your report to `./report.json`. It must validate against `./schema.json`. Every inventory sink must appear either in `findings[].sinks` or in `ruled_out[].sinks`. Use `findings: []` for a clean report. Set `repository` to the URL string from `context.json`'s `repository.url` (a string, not the object), `commit` to the HEAD sha of `./src`, and `artefact` to the package coordinate string (purl or `name@version`) you verified against in step 4. Set `spec_version` to `12`. Use today's date for the `date` field.
