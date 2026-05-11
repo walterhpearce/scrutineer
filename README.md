@@ -73,7 +73,7 @@ When the containerised runner is active (the default when Docker is available), 
 - **Usage tracking** -- per-scan token and cost figures plus a `/usage` page totalling spend per skill
 - **SBOM import** -- upload a CycloneDX or SPDX document, resolve each component to a source repository, and queue scans automatically
 - **CNA matching** -- identify the CVE Numbering Authority whose scope covers a repo so disclosures go to the right contact
-- **Upstream reporting** -- file a finding on the upstream repository through GitHub's private vulnerability reporting with the proposed patch attached, and push the fix to the temporary private fork when GitHub grants access
+- **Upstream reporting** -- file a finding on the upstream repository through GitHub's private vulnerability reporting with the proposed patch attached, and push the fix to the temporary private fork when GitHub grants access. A PVR report is hard to unsend; before pointing this at an external repository, run it once end-to-end against a repository you control with PVR enabled to confirm the body shape and patch attachment land the way you expect.
 - **Reachability analysis** -- trace sinks found in dependencies through application code to see which are actually reachable
 - **Rescan dedup** -- findings carry a content fingerprint so re-running a scan updates existing rows instead of creating duplicates; findings that stop appearing are marked "not seen" with a miss count
 - **CSAF export** -- download any finding as a schema-validated CSAF 2.0 advisory document

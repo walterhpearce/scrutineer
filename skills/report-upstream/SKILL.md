@@ -88,14 +88,18 @@ Try up to six times with a five-second gap. If `private_fork` stays `null`, set 
 If a `private_fork.full_name` appears and `suggested_fix` is non-empty:
 
 ```
+gh auth setup-git
 git -C ./src fetch origin {suggested_fix_commit} || git -C ./src fetch --unshallow
 git -C ./src checkout -b fix/{ghsa_id} {suggested_fix_commit}
 printf '%s' "$SUGGESTED_FIX" | git -C ./src apply -
-git -C ./src commit -am "Fix {ghsa_id}: {finding.title}"
+git -C ./src add -A
+printf '%s' "$COMMIT_MSG" | git -C ./src commit -F -
 git -C ./src push "https://github.com/{private_fork.full_name}.git" fix/{ghsa_id}
 ```
 
-(read `suggested_fix` from the finding into a variable rather than interpolating it into the command line). If `git apply` fails the diff no longer applies cleanly to `suggested_fix_commit` as fetched; do not improvise a fix, set `patch_pushed: false` with the apply error in `notes`. If the push is rejected (no write access yet), same: `patch_pushed: false`, reason in `notes`.
+Read `suggested_fix` and the commit message (subject `Fix {ghsa_id}: {finding.title}`) into shell variables and pipe them through stdin rather than interpolating into the command line — finding titles can contain backticks, `$()`, or other shell-special characters. `gh auth setup-git` configures git's credential helper to use the gh token for github.com pushes; without it the push hangs on a credential prompt on any runner where it has not already been called.
+
+If `git apply` fails the diff no longer applies cleanly to `suggested_fix_commit` as fetched; do not improvise a fix, set `patch_pushed: false` with the apply error in `notes`. If the push is rejected (no write access yet), same: `patch_pushed: false`, reason in `notes`.
 
 If `suggested_fix` is empty, skip the push and record `patch_pushed: false` with `notes: "no gated patch on the finding"`.
 
@@ -105,7 +109,7 @@ All with `Authorization: Bearer {token}`:
 
 - `PATCH {api_base}/findings/{finding_id}` with `{"fields": {"status": "reported"}, "by": "report-upstream"}`
 - `POST {api_base}/findings/{finding_id}/references` with `{"url": "<html_url>", "tags": "ghsa-upstream", "summary": "PVR report {ghsa_id} on {owner}/{repo}"}`
-- `POST {api_base}/findings/{finding_id}/communications` with `{"channel": "ghsa", "direction": "outbound", "actor": "report-upstream", "body": "Filed PVR report {ghsa_id} on {owner}/{repo}. Patch {pushed to fix/{ghsa_id} on {private_fork} | included in description; private fork pending maintainer acceptance}."}`
+- `POST {api_base}/findings/{finding_id}/communications` with `{"channel": "ghsa", "direction": "outbound", "actor": "report-upstream", "body": "<body>"}`. Build `<body>` as `Filed PVR report {ghsa_id} on {owner}/{repo}. ` followed by `Patch pushed to fix/{ghsa_id} on {private_fork}.` when `patch_pushed` is true, or `Patch included in the report description; private fork pending maintainer acceptance.` when false.
 
 ## Output
 
