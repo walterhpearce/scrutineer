@@ -47,8 +47,8 @@ func TestParseSARIF(t *testing.T) {
 	if xss.CWE != "CWE-79" {
 		t.Errorf("xss.CWE = %q, want CWE-79", xss.CWE)
 	}
-	if xss.Severity != "high" {
-		t.Errorf("xss.Severity = %q, want high (from security-severity 7.5)", xss.Severity)
+	if xss.Severity != "High" {
+		t.Errorf("xss.Severity = %q, want High (from security-severity 7.5)", xss.Severity)
 	}
 	if xss.Confidence != "high" {
 		t.Errorf("xss.Confidence = %q, want high", xss.Confidence)
@@ -64,8 +64,8 @@ func TestParseSARIF(t *testing.T) {
 	if sqli.CWE != "CWE-89" {
 		t.Errorf("sqli.CWE = %q, want CWE-89", sqli.CWE)
 	}
-	if sqli.Severity != "medium" {
-		t.Errorf("sqli.Severity = %q, want medium (from level=warning, no score)", sqli.Severity)
+	if sqli.Severity != "Medium" {
+		t.Errorf("sqli.Severity = %q, want Medium (from level=warning, no score)", sqli.Severity)
 	}
 	if sqli.Location != "src/db/users.js:17" {
 		t.Errorf("sqli.Location = %q", sqli.Location)
@@ -88,7 +88,7 @@ func TestParseMinimal(t *testing.T) {
 		t.Errorf("RepoURL = %q", r.RepoURL)
 	}
 	f := r.Findings[0]
-	if f.CWE != "CWE-22" || f.Severity != "critical" || f.Confidence != "high" {
+	if f.CWE != "CWE-22" || f.Severity != "Critical" || f.Confidence != "high" {
 		t.Errorf("fields = %+v", f)
 	}
 	if f.SuggestedFix == "" {
@@ -107,18 +107,30 @@ func TestParseMinimalDefaultsTool(t *testing.T) {
 	}
 }
 
-func TestParseMinimal_lowercasesSeverityAndConfidence(t *testing.T) {
+func TestParseMinimal_normalisesSeverityAndConfidence(t *testing.T) {
 	body := []byte(`{"repository":"https://x/y","findings":[{"title":"t","severity":"CRITICAL","confidence":"High"}]}`)
 	results, _, err := Parse(body)
 	if err != nil {
 		t.Fatal(err)
 	}
 	f := results[0].Findings[0]
-	if f.Severity != "critical" {
-		t.Errorf("Severity = %q, want critical", f.Severity)
+	if f.Severity != "Critical" {
+		t.Errorf("Severity = %q, want Critical", f.Severity)
 	}
 	if f.Confidence != "high" {
 		t.Errorf("Confidence = %q, want high", f.Confidence)
+	}
+}
+
+func TestNormaliseSeverity(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"critical", "Critical"}, {"CRITICAL", "Critical"}, {" High ", "High"},
+		{"medium", "Medium"}, {"low", "Low"}, {"informational", "informational"}, {"", ""},
+	}
+	for _, tc := range cases {
+		if got := normaliseSeverity(tc.in); got != tc.want {
+			t.Errorf("normaliseSeverity(%q) = %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }
 
@@ -168,8 +180,8 @@ func TestParseCSV(t *testing.T) {
 	if pt.Title != "Path traversal in download URL" {
 		t.Errorf("Title = %q", pt.Title)
 	}
-	if pt.Severity != "medium" || pt.Confidence != "medium" {
-		t.Errorf("Severity/Confidence = %q/%q, want medium/medium", pt.Severity, pt.Confidence)
+	if pt.Severity != "Medium" || pt.Confidence != "medium" {
+		t.Errorf("Severity/Confidence = %q/%q, want Medium/medium", pt.Severity, pt.Confidence)
 	}
 	if pt.CWE != "CWE-22" {
 		t.Errorf("CWE = %q, want CWE-22", pt.CWE)
@@ -185,15 +197,15 @@ func TestParseCSV(t *testing.T) {
 	}
 
 	ssrf := widget.Findings[1]
-	if ssrf.Severity != "low" || ssrf.CWE != "" {
-		t.Errorf("ssrf Severity/CWE = %q/%q, want low/empty", ssrf.Severity, ssrf.CWE)
+	if ssrf.Severity != "Low" || ssrf.CWE != "" {
+		t.Errorf("ssrf Severity/CWE = %q/%q, want Low/empty", ssrf.Severity, ssrf.CWE)
 	}
 
 	other := results[1]
 	if other.RepoURL != "https://github.com/example/other" {
 		t.Errorf("second RepoURL = %q", other.RepoURL)
 	}
-	if other.Findings[0].Severity != "critical" || other.Findings[0].CWE != "CWE-89" {
+	if other.Findings[0].Severity != "Critical" || other.Findings[0].CWE != "CWE-89" {
 		t.Errorf("other finding = %+v", other.Findings[0])
 	}
 }
@@ -221,8 +233,8 @@ func TestParseMarkdown(t *testing.T) {
 	if pt.Title != "Path traversal in download URL" {
 		t.Errorf("Title = %q", pt.Title)
 	}
-	if pt.Severity != "medium" {
-		t.Errorf("Severity = %q, want medium", pt.Severity)
+	if pt.Severity != "Medium" {
+		t.Errorf("Severity = %q, want Medium", pt.Severity)
 	}
 	if pt.Location != "download_url.rb:97" {
 		t.Errorf("Location = %q", pt.Location)
@@ -244,7 +256,7 @@ func TestParseMarkdown(t *testing.T) {
 	}
 
 	ssrf := r.Findings[1]
-	if ssrf.Severity != "low" || ssrf.Location != "lookup.rb:179" {
+	if ssrf.Severity != "Low" || ssrf.Location != "lookup.rb:179" {
 		t.Errorf("ssrf = %+v", ssrf)
 	}
 	if strings.Contains(ssrf.Description, "## Impact") {
@@ -275,17 +287,32 @@ func TestCWEFromTags(t *testing.T) {
 	}
 }
 
+func TestParseSARIF_ruleIndexFallback(t *testing.T) {
+	body := []byte(`{"runs":[{"tool":{"driver":{"name":"x","rules":[
+		{"id":"r1","shortDescription":{"text":"by index"},
+		 "properties":{"tags":["CWE-22"],"security-severity":"9.5"}}]}},
+		"results":[{"ruleIndex":0,"message":{"text":"m"}}]}]}`)
+	results, _, err := Parse(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := results[0].Findings[0]
+	if f.Title != "by index" || f.CWE != "CWE-22" || f.Severity != "Critical" {
+		t.Errorf("ruleIndex fallback: title=%q cwe=%q sev=%q", f.Title, f.CWE, f.Severity)
+	}
+}
+
 func TestSarifSeverity(t *testing.T) {
 	cases := []struct {
 		level, score, want string
 	}{
-		{"error", "9.1", "critical"},
-		{"warning", "7.0", "high"},
-		{"", "4.0", "medium"},
-		{"", "0.5", "low"},
-		{"error", "", "high"},
-		{"warning", "", "medium"},
-		{"note", "", "low"},
+		{"error", "9.1", "Critical"},
+		{"warning", "7.0", "High"},
+		{"", "4.0", "Medium"},
+		{"", "0.5", "Low"},
+		{"error", "", "High"},
+		{"warning", "", "Medium"},
+		{"note", "", "Low"},
 		{"", "", ""},
 	}
 	for _, tc := range cases {

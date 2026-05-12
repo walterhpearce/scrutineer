@@ -20,7 +20,27 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
+
+// severityCanon maps any casing of the four levels onto the title-case
+// form scrutineer uses everywhere else (severityOrder SQL, the
+// /findings filter, db.SeverityAtLeast). Anything unrecognised passes
+// through unchanged so an oddball source value still surfaces rather
+// than being dropped silently.
+var severityCanon = map[string]string{
+	"critical": "Critical",
+	"high":     "High",
+	"medium":   "Medium",
+	"low":      "Low",
+}
+
+func normaliseSeverity(s string) string {
+	if v, ok := severityCanon[strings.ToLower(strings.TrimSpace(s))]; ok {
+		return v
+	}
+	return strings.TrimSpace(s)
+}
 
 // Result is one batch of findings against one repository from one tool.
 // A single uploaded file can yield several Results when it contains

@@ -107,16 +107,14 @@ func (r sarifRun) result() Result {
 		res.RepoURL = r.VersionControlProvenance[0].RepositoryURI
 		res.Commit = r.VersionControlProvenance[0].RevisionID
 	}
-	rules := r.ruleIndex()
+	byID := r.ruleIndex()
 	for _, sr := range r.Results {
-		res.Findings = append(res.Findings, sr.finding(rules))
+		res.Findings = append(res.Findings, sr.finding(byID, r.Tool.Driver.Rules))
 	}
 	return res
 }
 
-// ruleIndex builds the id→rule map. SARIF lets a result reference its
-// rule by ruleId, by ruleIndex into tool.driver.rules, or both; index
-// the id so either path resolves.
+// ruleIndex builds the id→rule map for the ruleId reference path.
 func (r sarifRun) ruleIndex() map[string]sarifRule {
 	m := make(map[string]sarifRule, len(r.Tool.Driver.Rules))
 	for _, rule := range r.Tool.Driver.Rules {
@@ -125,8 +123,14 @@ func (r sarifRun) ruleIndex() map[string]sarifRule {
 	return m
 }
 
-func (sr sarifResult) finding(rules map[string]sarifRule) Finding {
-	rule := rules[sr.RuleID]
+// SARIF lets a result reference its rule by ruleId, by ruleIndex into
+// tool.driver.rules, or both. Some emitters set only ruleIndex, so
+// fall back to it when ruleId yields nothing.
+func (sr sarifResult) finding(byID map[string]sarifRule, rules []sarifRule) Finding {
+	rule, ok := byID[sr.RuleID]
+	if !ok && sr.RuleIndex != nil && *sr.RuleIndex >= 0 && *sr.RuleIndex < len(rules) {
+		rule = rules[*sr.RuleIndex]
+	}
 	f := Finding{
 		RuleID:      sr.RuleID,
 		Title:       firstNonEmpty(rule.ShortDescription.Text, rule.Name, sr.Message.Text, sr.RuleID),
@@ -175,22 +179,22 @@ func sarifSeverity(level, score string) string {
 	if s, err := strconv.ParseFloat(score, 64); err == nil {
 		switch {
 		case s >= cvssCritical:
-			return "critical"
+			return "Critical"
 		case s >= cvssHigh:
-			return "high"
+			return "High"
 		case s >= cvssMedium:
-			return "medium"
+			return "Medium"
 		case s > 0:
-			return "low"
+			return "Low"
 		}
 	}
 	switch strings.ToLower(level) {
 	case "error":
-		return "high"
+		return "High"
 	case "warning":
-		return "medium"
+		return "Medium"
 	case "note", "none":
-		return "low"
+		return "Low"
 	}
 	return ""
 }

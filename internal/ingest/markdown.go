@@ -57,7 +57,7 @@ func parseMarkdown(data []byte) ([]Result, error) {
 			f: Finding{
 				Title:        title,
 				Description:  buildMarkdownDescription(sections),
-				Severity:     strings.ToLower(meta["Severity"]),
+				Severity:     normaliseSeverity(meta["Severity"]),
 				CWE:          normaliseCWE(meta["CWE"]),
 				Location:     loc,
 				SuggestedFix: strings.TrimSpace(sections["Recommended fix"]),

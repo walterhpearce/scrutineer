@@ -80,7 +80,7 @@ func parseCSV(data []byte) ([]Result, error) {
 			RuleID:      col(row, "Finding URL"),
 			Title:       firstNonEmpty(col(row, "Name"), col(row, "Category")),
 			Description: col(row, "Description"),
-			Severity:    strings.ToLower(col(row, "Severity")),
+			Severity:    normaliseSeverity(col(row, "Severity")),
 			Confidence:  strings.ToLower(col(row, "Confidence")),
 			CWE:         normaliseCWE(col(row, "CWE")),
 			Location:    joinLocation(col(row, "File path"), col(row, "Line")),

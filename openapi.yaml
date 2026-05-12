@@ -645,19 +645,22 @@ paths:
     post:
       summary: Import externally-produced findings
       description: |
-        Ingests a SARIF 2.1.0 document or a minimal JSON report and creates
-        Finding rows under a synthetic `Kind: import` scan. The repository is
-        taken from SARIF `versionControlProvenance` or the minimal-JSON
-        `repository` field; when neither is present the caller must pass
-        `?repo=`. Re-importing the same report dedupes by fingerprint and
-        bumps `seen_count` rather than inserting duplicates. No bearer token;
-        localhost-only.
+        Ingests a SARIF 2.1.0 document, a minimal JSON report, a findings
+        CSV export, or a findings markdown export and creates Finding rows
+        under a synthetic `Kind: import` scan. The format is sniffed from
+        the body. The repository is taken from the body's own provenance
+        (SARIF `versionControlProvenance`, the minimal-JSON `repository`
+        field, the CSV `Repository` column, the markdown location link);
+        when absent the caller must pass `?repo=`. Re-importing the same
+        report dedupes by fingerprint and bumps `seen_count` rather than
+        inserting duplicates. No bearer token; localhost-only. See
+        docs/import.md for the per-format field mapping.
       operationId: importFindings
       security: []
       parameters:
         - name: repo
           in: query
-          description: Repository URL to attribute findings to when the body carries no provenance.
+          description: Repository URL to attribute findings to. Overrides any provenance in the body.
           schema: { type: string, format: uri }
       requestBody:
         required: true
@@ -668,6 +671,14 @@ paths:
                 - $ref: '#/components/schemas/ImportMinimal'
                 - description: SARIF 2.1.0 document (see sarif-2.1.0 schema).
                   type: object
+          text/csv:
+            schema:
+              type: string
+              description: Header row must contain Severity, Repository, Name, Description.
+          text/markdown:
+            schema:
+              type: string
+              description: One H1 per finding with H2 sections and a `**Key:** value` metadata block.
       responses:
         '201':
           description: Findings created and/or re-observed.
@@ -678,6 +689,8 @@ paths:
           description: Body unreadable or empty
         '403':
           description: Host header is not localhost
+        '413':
+          description: Body exceeds 16 MiB
         '422':
           description: Body matches no supported format, or repository unknown
 
@@ -925,7 +938,7 @@ components:
     ImportResponse:
       type: object
       properties:
-        format: { type: string, enum: [sarif, minimal] }
+        format: { type: string, enum: [sarif, minimal, csv, markdown] }
         results:
           type: array
           items:

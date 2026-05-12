@@ -44,7 +44,7 @@ func parseMinimal(data []byte) ([]Result, error) {
 		res.Findings = append(res.Findings, Finding{
 			Title:        f.Title,
 			Description:  f.Description,
-			Severity:     strings.ToLower(strings.TrimSpace(f.Severity)),
+			Severity:     normaliseSeverity(f.Severity),
 			Confidence:   strings.ToLower(strings.TrimSpace(f.Confidence)),
 			CWE:          f.CWE,
 			Location:     f.Location,

@@ -83,7 +83,7 @@ func TestHandleImportSARIF(t *testing.T) {
 	if findings[0].ImportedFrom != "CodeQL" {
 		t.Errorf("ImportedFrom = %q", findings[0].ImportedFrom)
 	}
-	if findings[0].CWE != "CWE-79" || findings[0].Severity != "high" {
+	if findings[0].CWE != "CWE-79" || findings[0].Severity != "High" {
 		t.Errorf("finding[0] = cwe=%q sev=%q", findings[0].CWE, findings[0].Severity)
 	}
 	if findings[0].Confidence != "high" {
