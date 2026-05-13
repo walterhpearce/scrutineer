@@ -38,8 +38,23 @@ func FingerprintFinding(skillName, subPath, cwe, location, title string) string 
 func normaliseLocation(loc string) string {
 	loc = strings.TrimSpace(loc)
 	loc = strings.TrimPrefix(loc, "./")
-	if i := strings.IndexByte(loc, ':'); i >= 0 {
-		loc = loc[:i]
+	for {
+		i := strings.LastIndexByte(loc, ':')
+		if i <= 0 {
+			break
+		}
+		isNum := true
+		for _, c := range loc[i+1:] {
+			if c < '0' || c > '9' {
+				isNum = false
+				break
+			}
+		}
+		if isNum && len(loc[i+1:]) > 0 {
+			loc = loc[:i]
+		} else {
+			break
+		}
 	}
 	return strings.ToLower(loc)
 }
