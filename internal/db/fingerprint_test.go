@@ -4,12 +4,15 @@ import "testing"
 
 func TestNormaliseLocation(t *testing.T) {
 	cases := map[string]string{
-		"src/users.rb:42":     "src/users.rb",
-		"src/users.rb:42:7":   "src/users.rb",
-		"src/users.rb":        "src/users.rb",
-		"./src/users.rb:1":    "src/users.rb",
-		"  Src/Users.rb:10  ": "src/users.rb",
-		"":                    "",
+		"src/users.rb:42":                "src/users.rb",
+		"src/users.rb:42:7":              "src/users.rb",
+		"src/users.rb":                   "src/users.rb",
+		"./src/users.rb:1":               "src/users.rb",
+		"  Src/Users.rb:10  ":            "src/users.rb",
+		"C:\\project\\src\\main.go:42":   "c:\\project\\src\\main.go",
+		"C:\\project\\src\\main.go:42:7": "c:\\project\\src\\main.go",
+		"C:\\project\\src\\main.go":      "c:\\project\\src\\main.go",
+		"":                               "",
 	}
 	for in, want := range cases {
 		if got := normaliseLocation(in); got != want {
