@@ -18,6 +18,7 @@ func TestProfileByName(t *testing.T) {
 		{"", "", true, false},
 		{"default", "", true, false},
 		{"php", "php", true, true},
+		{"php-ext", "php-ext", true, true},
 		{"ruby", "ruby", true, true},
 		{"unknown", "", false, false},
 	}
@@ -37,28 +38,143 @@ func TestProfileByName(t *testing.T) {
 	}
 }
 
+const configM4Body = `dnl Minimal extension config
+PHP_ARG_ENABLE([example], [whether to enable example], [--enable-example])
+if test "$PHP_EXAMPLE" != "no"; then
+  PHP_NEW_EXTENSION(example, example.c, $ext_shared)
+fi
+`
+
+const configM4WithoutPHPArg = `dnl just a stray autoconf file
+AC_INIT([thing], [1.0])
+`
+
+func writeConfigM4(t *testing.T, dir, contents string) {
+	t.Helper()
+	const configM4FileMode = 0o644
+	path := filepath.Join(dir, "config.m4")
+	if err := os.WriteFile(path, []byte(contents), configM4FileMode); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
 func TestMatchProfile(t *testing.T) {
 	tests := []struct {
-		name string
-		json string
-		want string
+		name    string
+		json    string
+		setup   func(t *testing.T, dir string)
+		want    string
+		noSrcOK bool // if true, srcDir is "" for this case
 	}{
-		{"composer matches php", `{"package_managers":[{"name":"Composer"}]}`, "php"},
-		{"composer case-insensitive", `{"package_managers":[{"name":"composer"}]}`, "php"},
-		{"bundler matches ruby", `{"package_managers":[{"name":"Bundler"}]}`, "ruby"},
-		{"bundler case-insensitive", `{"package_managers":[{"name":"bundler"}]}`, "ruby"},
-		{"ruby before php picks ruby", `{"package_managers":[{"name":"Bundler"},{"name":"Composer"}]}`, "ruby"},
-		{"php before ruby picks php", `{"package_managers":[{"name":"Composer"},{"name":"Bundler"}]}`, "php"},
-		{"first match wins over later", `{"package_managers":[{"name":"Composer"},{"name":"npm"}]}`, "php"},
-		{"unknown manager falls back", `{"package_managers":[{"name":"npm"}]}`, ""},
-		{"empty list falls back", `{"package_managers":[]}`, ""},
-		{"missing field falls back", `{}`, ""},
-		{"invalid json falls back", `not json`, ""},
-		{"no first match but later is known", `{"package_managers":[{"name":"npm"},{"name":"Composer"}]}`, "php"},
+		{
+			name: "composer matches php",
+			json: `{"package_managers":[{"name":"Composer"}]}`,
+			want: "php",
+		},
+		{
+			name: "composer case-insensitive",
+			json: `{"package_managers":[{"name":"composer"}]}`,
+			want: "php",
+		},
+		{
+			name: "bundler matches ruby",
+			json: `{"package_managers":[{"name":"Bundler"}]}`,
+			want: "ruby",
+		},
+		{
+			name: "bundler case-insensitive",
+			json: `{"package_managers":[{"name":"bundler"}]}`,
+			want: "ruby",
+		},
+		{
+			name: "first composer match wins",
+			json: `{"package_managers":[{"name":"Composer"},{"name":"npm"}]}`,
+			want: "php",
+		},
+		{
+			name: "composer present even if not first",
+			json: `{"package_managers":[{"name":"npm"},{"name":"Composer"}]}`,
+			want: "php",
+		},
+		{
+			name: "composer + bundler picks php (registry order)",
+			json: `{"package_managers":[{"name":"Composer"},{"name":"Bundler"}]}`,
+			want: "php",
+		},
+		{
+			name: "bundler + composer still picks php (registry order, not brief order)",
+			json: `{"package_managers":[{"name":"Bundler"},{"name":"Composer"}]}`,
+			want: "php",
+		},
+		{
+			name: "unknown manager falls back",
+			json: `{"package_managers":[{"name":"npm"}]}`,
+			want: "",
+		},
+		{
+			name: "empty manager list falls back",
+			json: `{"package_managers":[]}`,
+			want: "",
+		},
+		{
+			name: "missing field falls back",
+			json: `{}`,
+			want: "",
+		},
+		{
+			name: "invalid json falls back",
+			json: `not json`,
+			want: "",
+		},
+		{
+			name: "config.m4 with PHP_ARG selects php-ext",
+			json: `{"package_managers":[]}`,
+			setup: func(t *testing.T, dir string) {
+				writeConfigM4(t, dir, configM4Body)
+			},
+			want: "php-ext",
+		},
+		{
+			name: "php-ext wins over php when both signals present",
+			json: `{"package_managers":[{"name":"Composer"}]}`,
+			setup: func(t *testing.T, dir string) {
+				writeConfigM4(t, dir, configM4Body)
+			},
+			want: "php-ext",
+		},
+		{
+			name: "config.m4 without PHP_ARG does not match php-ext",
+			json: `{"package_managers":[{"name":"Composer"}]}`,
+			setup: func(t *testing.T, dir string) {
+				writeConfigM4(t, dir, configM4WithoutPHPArg)
+			},
+			want: "php", // composer marker still picks php
+		},
+		{
+			name: "config.m4 without PHP_ARG and no composer falls back",
+			json: `{"package_managers":[]}`,
+			setup: func(t *testing.T, dir string) {
+				writeConfigM4(t, dir, configM4WithoutPHPArg)
+			},
+			want: "",
+		},
+		{
+			name:    "marker profile cannot match without srcDir",
+			json:    `{"package_managers":[]}`,
+			noSrcOK: true,
+			want:    "",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchProfile([]byte(tt.json))
+			dir := ""
+			if !tt.noSrcOK {
+				dir = t.TempDir()
+			}
+			if tt.setup != nil {
+				tt.setup(t, dir)
+			}
+			got := matchProfile([]byte(tt.json), dir)
 			if got.Name != tt.want {
 				t.Errorf("matchProfile = %q, want %q", got.Name, tt.want)
 			}
@@ -125,10 +241,12 @@ func TestEnsureImage_missingDockerfile(t *testing.T) {
 }
 
 // TestBuiltinProfiles_registrySanity guards the invariants matchProfile
-// and the validators rely on: every entry must have a name and ecosystem,
-// names must be unique, and ecosystems must be unique case-insensitively
-// (a duplicate would silently make auto-detection resolve the wrong
-// profile, with no other test failing).
+// and the validators rely on: every entry must have a name and either an
+// Ecosystem or at least one Marker, names must be unique, and ecosystems
+// must be unique case-insensitively (a duplicate would silently make
+// auto-detection resolve the wrong profile, with no other test failing).
+// Marker-only profiles legitimately have an empty Ecosystem and are
+// excluded from the ecosystem-uniqueness check.
 func TestBuiltinProfiles_registrySanity(t *testing.T) {
 	names := map[string]bool{}
 	ecosystems := map[string]bool{}
@@ -136,13 +254,16 @@ func TestBuiltinProfiles_registrySanity(t *testing.T) {
 		if p.Name == "" {
 			t.Error("profile with empty Name")
 		}
-		if p.Ecosystem == "" {
-			t.Errorf("profile %q has empty Ecosystem", p.Name)
+		if p.Ecosystem == "" && len(p.Markers) == 0 {
+			t.Errorf("profile %q has neither Ecosystem nor Markers", p.Name)
 		}
 		if names[p.Name] {
 			t.Errorf("duplicate profile Name %q", p.Name)
 		}
 		names[p.Name] = true
+		if p.Ecosystem == "" {
+			continue
+		}
 		eco := strings.ToLower(p.Ecosystem)
 		if ecosystems[eco] {
 			t.Errorf("duplicate profile Ecosystem %q (case-insensitive)", p.Ecosystem)
@@ -158,6 +279,22 @@ func TestRepoShipsProfileDockerfiles(t *testing.T) {
 		path := filepath.Join(repoRoot, "docker", "profiles", p.Name, "Dockerfile")
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("expected %s profile Dockerfile to exist: %v", p.Name, err)
+		}
+	}
+}
+
+// TestProfileGuidesShipForPHP keeps the php / php-ext profiles honest
+// about the per-container PROFILE.md they advertise. PROFILE.md is
+// optional in general (a profile without one simply gets no orientation
+// injected at scan time); the php profiles document specifics the
+// agent needs to behave correctly, so missing them is a real regression.
+func TestProfileGuidesShipForPHP(t *testing.T) {
+	wd, _ := os.Getwd()
+	repoRoot := filepath.Join(wd, "..", "..")
+	for _, name := range []string{"php", "php-ext"} {
+		guide := filepath.Join(repoRoot, "docker", "profiles", name, "PROFILE.md")
+		if _, err := os.Stat(guide); err != nil {
+			t.Errorf("expected %s profile PROFILE.md to exist: %v", name, err)
 		}
 	}
 }
