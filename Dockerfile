@@ -3,7 +3,12 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /scrutineer ./cmd/scrutineer
+# COMMIT is the git SHA being built. .git is excluded from the build context
+# (.dockerignore), so the Go VCS stamp is unavailable here; pass it explicitly
+# with `docker build --build-arg COMMIT=$(git rev-parse HEAD)` to surface it on
+# the settings page. Empty when not supplied.
+ARG COMMIT=""
+RUN CGO_ENABLED=0 go build -ldflags "-X main.commit=${COMMIT}" -o /scrutineer ./cmd/scrutineer
 
 FROM node:26-alpine@sha256:7c6af15abe4e3de859690e7db171d0d711bf37d27528eddfe625b2fe89e097f8 AS claude
 RUN npm install -g @anthropic-ai/claude-code@2.1.119

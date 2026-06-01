@@ -60,6 +60,11 @@ type Server struct {
 	// is not configured.
 	SkillsRepoSHA string
 
+	// Commit is the git SHA scrutineer itself was built from, shown on the
+	// settings page. Set once by main; empty when the build carries no VCS
+	// stamp (e.g. an ldflags-less build outside a git checkout).
+	Commit string
+
 	// resolvePURL maps a Package URL to its source repository URL via
 	// packages.ecosyste.ms. Field rather than direct call so tests can
 	// stub the network lookup.
@@ -69,6 +74,13 @@ type Server struct {
 	skillNamesMu    sync.Mutex
 	skillNamesCache []string
 	skillNamesTTL   time.Time
+
+	// toolMeta caches the scanner-tool and docker versions shown on the
+	// settings page. Gathering them shells out to docker, so it is cached
+	// behind a TTL to keep the page DB-fast on repeat loads.
+	toolMetaMu    sync.Mutex
+	toolMetaCache toolMetadata
+	toolMetaTTL   time.Time
 }
 
 // displaySeverity maps any known casing of a severity string to its

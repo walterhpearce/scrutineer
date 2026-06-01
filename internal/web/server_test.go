@@ -3011,6 +3011,28 @@ func TestSettingsShow_rendersThemeOptions(t *testing.T) {
 	}
 }
 
+func TestSettingsShow_rendersAboutAndScannerFindings(t *testing.T) {
+	s, done := newTestServer(t)
+	defer done()
+	s.Commit = "abcdef1234567890"
+
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, localReq("GET", "/settings"))
+	if w.Code != 200 {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	body := w.Body.String()
+	for _, want := range []string{"Scanner findings", "About", "Scrutineer commit", "Claude Code", "Semgrep", "Zizmor", "Docker"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("settings page missing %q", want)
+		}
+	}
+	// Commit is rendered short (first 12 chars).
+	if !strings.Contains(body, "abcdef123456") {
+		t.Error("settings page missing shortened commit SHA")
+	}
+}
+
 func TestSettingsUpdateTheme_setsCookie(t *testing.T) {
 	s, done := newTestServer(t)
 	defer done()
