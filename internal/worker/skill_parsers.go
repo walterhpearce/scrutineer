@@ -875,6 +875,17 @@ func (w *Worker) parseRevalidateOutput(scan *db.Scan, report string, emit func(E
 		return fmt.Errorf("load finding %d: %w", *scan.FindingID, err)
 	}
 
+	// Skip findings that have left the active funnel. A concurrent
+	// finding-dedup pass (or an analyst) may have closed this finding
+	// between enqueue and run; revalidating it would promote new->enriched,
+	// cache a verdict, and chain a verify run on a finding nobody will look
+	// at — wasted spend, and the promotion would clobber a just-applied
+	// duplicate status back to enriched.
+	if f.Status.Closed() {
+		emit(Event{Kind: KindText, Text: fmt.Sprintf("finding %d is %s; skipping revalidate", f.ID, f.Status)})
+		return nil
+	}
+
 	// Cache the verdict on the finding so the audit queue can filter
 	// without scanning finding_notes (#362). Written before the status
 	// transition so a true_positive promotion sits on top of the verdict
@@ -998,13 +1009,11 @@ func (w *Worker) dedupFinding(repoID, findingID uint) (db.Finding, bool) {
 	return f, true
 }
 
+// dedupCandidateOpen reports whether a finding is still in the active funnel
+// and so eligible to be marked (or kept as) a duplicate. The complement of
+// db.FindingLifecycle.Closed.
 func dedupCandidateOpen(status db.FindingLifecycle) bool {
-	switch status {
-	case db.FindingNew, db.FindingEnriched, db.FindingTriaged, db.FindingReady, db.FindingReported, db.FindingAcknowledged:
-		return true
-	default:
-		return false
-	}
+	return !status.Closed()
 }
 
 func (w *Worker) addDedupNote(duplicateID, canonicalID uint, reason string) error {

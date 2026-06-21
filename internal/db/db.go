@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -303,6 +304,14 @@ var FindingLifecycles = []FindingLifecycle{
 // ClosedFindingLifecycles are terminal or hidden-by-default findings.
 var ClosedFindingLifecycles = []FindingLifecycle{
 	FindingFixed, FindingPublished, FindingRejected, FindingDuplicate,
+}
+
+// Closed reports whether the lifecycle is terminal or hidden-by-default
+// (fixed, published, rejected, duplicate) — a finding no longer in the
+// active triage funnel. The in-memory counterpart to the "status NOT IN
+// ClosedFindingLifecycles" filter used in queries.
+func (s FindingLifecycle) Closed() bool {
+	return slices.Contains(ClosedFindingLifecycles, s)
 }
 
 func ClosedFindingLifecycleSQLValues() string {

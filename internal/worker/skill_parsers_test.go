@@ -556,6 +556,23 @@ func TestParseTimeField_emitsOnUnparseable(t *testing.T) {
 	}
 }
 
+func TestParseRevalidate_skipsClosedFinding(t *testing.T) {
+	// A concurrent finding-dedup pass may close the finding between enqueue
+	// and run. Revalidate must not promote it, cache a verdict, or chain a
+	// verify on it.
+	report := `{"verdict":"true_positive","reason":"sink still reachable"}`
+	f, gdb := runSkillWithFinding(t, "revalidate", report, db.FindingDuplicate)
+	if f.Status != db.FindingDuplicate {
+		t.Errorf("status = %s, want duplicate (unchanged)", f.Status)
+	}
+	if f.LastRevalidateVerdict != "" {
+		t.Errorf("last_revalidate_verdict = %q, want empty (no write on closed finding)", f.LastRevalidateVerdict)
+	}
+	if notes := findingNotes(gdb, f.ID); len(notes) != 0 {
+		t.Errorf("want no notes on a skipped finding, got %+v", notes)
+	}
+}
+
 func TestParseRevalidate_falsePositiveDoesNotAutoReject(t *testing.T) {
 	report := `{"verdict":"false_positive","reason":"the path lives under test/ fixtures; threat model disclaims it"}`
 	f, gdb := runSkillWithFinding(t, "revalidate", report, db.FindingNew)

@@ -249,6 +249,7 @@ func New(gdb *gorm.DB, q *queue.Queue, log *slog.Logger, broker *Broker, w *work
 	if w != nil {
 		w.OnFindingCreated = s.autoEnqueueRevalidate
 		w.OnRevalidateVerdict = s.autoChainVerifyAfterRevalidate
+		w.OnScanFinalized = s.autoEnqueueFindingDedupAfterDeepDive
 	}
 	return s, nil
 }
@@ -876,7 +877,7 @@ func (s *Server) findingToggleCounts(r *http.Request, scanners bool) (int64, int
 	missedWhere = append(missedWhere, "missed_count > 0")
 
 	scannerWhere, scannerArgs := findingIndexWhereSQL(r, true, true)
-	scannerWhere = append(scannerWhere, "scan_id NOT IN (SELECT id FROM scans WHERE skill_name = ? OR skill_name = '' OR skill_name IS NULL)")
+	scannerWhere = append(scannerWhere, scannerScanFilter)
 	scannerArgs = append(scannerArgs, deepDiveSkillName)
 
 	var counts struct {
@@ -899,7 +900,7 @@ func findingIndexWhereSQL(r *http.Request, includeScanners, includeMissed bool) 
 	where := []string{"1 = 1"}
 	var args []any
 	if !includeScanners {
-		where = append(where, "scan_id IN (SELECT id FROM scans WHERE skill_name = ? OR skill_name = '' OR skill_name IS NULL)")
+		where = append(where, nonScannerScanFilter)
 		args = append(args, deepDiveSkillName)
 	}
 	if sev := r.URL.Query().Get("severity"); sev != "" {
@@ -1011,6 +1012,17 @@ const (
 	// deepDiveSkillName is the skill whose reports feed the Summary, Findings
 	// and Threat Model tabs on the repository page.
 	deepDiveSkillName = "security-deep-dive"
+	// nonScannerScanFilter selects findings whose parent scan is the
+	// security-deep-dive scanner, the legacy claude job (empty skill name),
+	// or has no recorded source — everything the UI groups under
+	// "non-scanner". scannerScanFilter is its structural inverse: the cheap
+	// tool scanners (semgrep, zizmor) and imported reports (CodeQL, Snyk,
+	// which carry the tool name as skill_name). Both take deepDiveSkillName
+	// as the single bound parameter; deriving one from the other keeps the
+	// Findings toggle and the dedup auto-enqueue agreeing on what "scanner"
+	// means without a second copy of the subquery to keep in sync.
+	nonScannerScanFilter = "scan_id IN (SELECT id FROM scans WHERE skill_name = ? OR skill_name = '' OR skill_name IS NULL)"
+	scannerScanFilter    = "NOT (" + nonScannerScanFilter + ")"
 	// threatModelSkillName is the skill whose report feeds the Threat Model
 	// tab when present; repos that predate it fall back to the boundaries
 	// section of the deep-dive report so older scans keep rendering.

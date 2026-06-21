@@ -85,7 +85,18 @@ type Worker struct {
 	// lower than the original claim, and the chain to verify uses the
 	// revised value.
 	OnRevalidateVerdict func(scan *db.Scan, finding *db.Finding, verdict, severity string)
-	ScanTimeout         time.Duration
+	// OnScanFinalized, when non-nil, is called once after a scan finishes its
+	// analysis with findings committed and the worker has no further writes
+	// to make for the scan — that is, ScanDone or a fail_on-threshold
+	// failure (which still persists findings). Named "finalized" rather than
+	// "done" precisely because it also fires on that failure path. The web
+	// layer wires it up to auto-enqueue a repository-scoped finding-dedup
+	// pass after a security-deep-dive run adds new findings to a repo that
+	// already holds other non-scanner findings. Firing post-commit means the
+	// dedup run sees the full finding set, and the worker has no queue access
+	// of its own so this callback is the seam.
+	OnScanFinalized func(scan *db.Scan)
+	ScanTimeout     time.Duration
 
 	// Queue is the queue this worker is registered on. Required for the
 	// prereq gate to re-enqueue a scan whose upstream skills have not yet
@@ -353,23 +364,45 @@ func (w *Worker) wrap(h handler) func(context.Context, []byte) error {
 		emit := w.scanEmitter(&scan)
 
 		report, err := h(ctx, &scan, emit)
+		return w.finalizeScan(ctx, &scan, report, err, timeout, emit)
+	}
+}
 
-		finishScan(ctx, &scan, report, err, timeout, emit)
-		if scan.Status == db.ScanDone && !scan.MaxTurnsHit {
-			w.clearSessionStore(&scan)
+// finalizeScan persists the terminal scan state, fires post-completion
+// hooks, cleans up the workspace, and publishes the status. It returns an
+// error only when the terminal save fails, which wrap propagates to goqite.
+func (w *Worker) finalizeScan(ctx context.Context, scan *db.Scan, report string, err error, timeout time.Duration, emit func(Event)) error {
+	finishScan(ctx, scan, report, err, timeout, emit)
+	if scan.Status == db.ScanDone && !scan.MaxTurnsHit {
+		w.clearSessionStore(scan)
+	}
+	scan.StatusPriority = db.StatusPriorityFor(scan.Status)
+	if saveErr := w.DB.Save(scan).Error; saveErr != nil {
+		return saveErr
+	}
+	w.maybeFireScanFinalized(scan, err)
+	if scan.Status.Terminal() {
+		if rmErr := os.RemoveAll(w.scanWorkRoot(scan)); rmErr != nil {
+			w.Log.Warn("workspace cleanup failed", "scan", scan.ID, "err", rmErr)
 		}
-		scan.StatusPriority = db.StatusPriorityFor(scan.Status)
-		if saveErr := w.DB.Save(&scan).Error; saveErr != nil {
-			return saveErr
-		}
-		if scan.Status.Terminal() {
-			if rmErr := os.RemoveAll(w.scanWorkRoot(&scan)); rmErr != nil {
-				w.Log.Warn("workspace cleanup failed", "scan", scan.ID, "err", rmErr)
-			}
-		}
-		w.publish(scan.ID, scan.RepositoryID, "scan-status", string(scan.Status))
-		w.Log.Info("job finished", "scan", scan.ID, "kind", scan.Kind, "status", scan.Status)
-		return nil
+	}
+	w.publish(scan.ID, scan.RepositoryID, "scan-status", string(scan.Status))
+	w.Log.Info("job finished", "scan", scan.ID, "kind", scan.Kind, "status", scan.Status)
+	return nil
+}
+
+// maybeFireScanFinalized invokes the OnScanFinalized hook once a scan has
+// finished its analysis with findings committed. A fail_on threshold leaves
+// Status=ScanFailed but the findings are already persisted (see
+// finishErroredScan), so a deep-dive that trips fail_on must still trigger
+// downstream dedup — exactly the high-severity case we most want deduped.
+func (w *Worker) maybeFireScanFinalized(scan *db.Scan, runErr error) {
+	if w.OnScanFinalized == nil {
+		return
+	}
+	_, failOnThreshold := errors.AsType[*FailOnThresholdError](runErr)
+	if scan.Status == db.ScanDone || failOnThreshold {
+		w.OnScanFinalized(scan)
 	}
 }
 
