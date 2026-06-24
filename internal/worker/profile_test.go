@@ -282,6 +282,17 @@ func TestMatchProfile(t *testing.T) {
 			want: "php",
 		},
 		{
+			// rust is registered before the c-cpp fallback, so a Cargo
+			// crate that also ships a Makefile (common for -sys crates and
+			// build.rs-driven C builds) still routes to the rust profile.
+			name: "cargo wins over a c-cpp build file",
+			json: `{"package_managers":[{"name":"Cargo"}]}`,
+			setup: func(t *testing.T, dir string) {
+				writeMarkerFile(t, dir, "Makefile")
+			},
+			want: "rust",
+		},
+		{
 			name: "cargo matches rust",
 			json: `{"package_managers":[{"name":"Cargo"}]}`,
 			want: "rust",

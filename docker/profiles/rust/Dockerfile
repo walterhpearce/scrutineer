@@ -10,8 +10,8 @@ ARG RUST_STABLE_VERSION=1.96
 ARG RUST_NIGHTLY_VERSION=nightly-2026-06-24
 
 USER root
-RUN apt update \
- && apt install -y --no-install-recommends \
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
         build-essential \
         pkg-config \
         gcc-multilib \
