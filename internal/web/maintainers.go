@@ -58,18 +58,19 @@ func (s *Server) maintainersList(w http.ResponseWriter, r *http.Request) {
 			N            int
 		}
 		var counts []row
-		// LEFT JOIN scans so the COUNT only includes deep-dive findings.
-		// Scanner output (zizmor, semgrep) is per-repo lint noise and
-		// shouldn't drive maintainer routing.
+		// LEFT JOIN scans so the COUNT only includes curated LLM-audit findings
+		// (security-deep-dive, vuln-scan). Scanner output (zizmor, semgrep) is
+		// per-repo lint noise and shouldn't drive maintainer routing. Mirrors
+		// findingsBucketSkillSQL, qualified to the scans alias for the join.
 		s.DB.Raw(`
 			SELECT rm.maintainer_id, COUNT(f.id) AS n
 			FROM repository_maintainers rm
 			LEFT JOIN findings f ON f.repository_id = rm.repository_id
 			LEFT JOIN scans s ON s.id = f.scan_id
 			WHERE rm.maintainer_id IN ?
-			  AND (s.skill_name IS NULL OR s.skill_name = '' OR s.skill_name = ?)
+			  AND (s.skill_name IS NULL OR s.skill_name = '' OR s.skill_name IN (?, ?))
 			GROUP BY rm.maintainer_id
-		`, ids, deepDiveSkillName).Scan(&counts)
+		`, ids, deepDiveSkillName, vulnScanSkillName).Scan(&counts)
 		for _, c := range counts {
 			findingCounts[c.MaintainerID] = c.N
 		}
