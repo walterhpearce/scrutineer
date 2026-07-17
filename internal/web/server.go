@@ -433,6 +433,10 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 	data["Theme"] = resolveTheme(r)
 	data["ColorScheme"] = resolveColorScheme(r)
 	data["Flash"] = popFlash(w, r)
+	// Sharing gates admin nav and mutating controls in the shared templates
+	// when the request runs under a read-only view scope (the sharing portal).
+	// Unset for the local operator, so every page renders as before.
+	data["Sharing"] = isReadOnly(r)
 	// Seed the sorter with the handler's EFFECTIVE sort (data["Sort"]) rather
 	// than the raw ?sort param. That token is already the sanitized, defaulted
 	// sort the ORDER BY actually used, so folding it in makes a default or
@@ -624,6 +628,9 @@ func distinctLanguages(gdb *gorm.DB) []string {
 
 func (s *Server) repoList(w http.ResponseWriter, r *http.Request) {
 	q := s.DB.Model(&db.Repository{})
+	// Restrict to the request's allow-listed repositories when a view scope is
+	// set (the sharing portal); a no-op for the local operator.
+	q = applyRepoScope(q, r, "id")
 	lang := r.URL.Query().Get("language")
 	if lang != "" {
 		// languages is a ", "-joined list; wrapping both sides lets one
@@ -1031,6 +1038,9 @@ func (s *Server) findingsIndexQuery(r *http.Request, includeScanners, includeMis
 		q = q.Where("title LIKE ? OR location LIKE ? OR cwe LIKE ? OR cve_id LIKE ? OR ghsa_id LIKE ? OR affected LIKE ?",
 			like, like, like, like, like, like)
 	}
+	// Restrict to the request's allow-listed repositories when a view scope is
+	// set (the sharing portal); a no-op for the local operator.
+	q = applyRepoScope(q, r, "repository_id")
 	return q
 }
 
@@ -1609,6 +1619,10 @@ type findingWorkflowData struct {
 	db.Finding
 	VerifyInFlight bool
 	HasDependents  bool
+	// Sharing mirrors the top-level template flag: the workflow partial is
+	// rendered with this struct as its dot, so it carries its own copy to gate
+	// the skill-enqueue buttons for read-only sharing requests.
+	Sharing bool
 }
 
 func (s *Server) findingShow(w http.ResponseWriter, r *http.Request) {
@@ -1700,6 +1714,7 @@ func (s *Server) findingShow(w http.ResponseWriter, r *http.Request) {
 			Finding:        f,
 			VerifyInFlight: verifyInFlight,
 			HasDependents:  hasDependents,
+			Sharing:        isReadOnly(r),
 		},
 		"Exposures":     exposures,
 		"HasDependents": hasDependents,

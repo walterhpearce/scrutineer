@@ -265,7 +265,7 @@
   </details>
   {{end}}
 
-  {{if .ShowExposure}}
+  {{if and (not $.Sharing) .ShowExposure}}
   <details open class="group border-b">
     <summary class="w-full outline-none rounded-md focus-visible:ring-ring/50 focus-visible:ring-[3px]">
       <h3 class="flex flex-1 items-center justify-between gap-4 py-4 text-sm font-medium hover:underline">
@@ -306,6 +306,7 @@
   </details>
   {{end}}
 
+  {{if not $.Sharing}}
   <details class="group border-b">
     <summary class="w-full outline-none rounded-md focus-visible:ring-ring/50 focus-visible:ring-[3px]">
       <h3 class="flex flex-1 items-center justify-between gap-4 py-4 text-sm font-medium hover:underline">
@@ -331,6 +332,7 @@
       </form>
     </section>
   </details>
+  {{end}}
 
   {{if $f.Mitigation}}
   <details open class="group border-b">
@@ -415,6 +417,7 @@ git commit -m "fix: {{$f.Title}}"</pre>
   </details>
   {{end}}
 
+  {{if not $.Sharing}}
   <details class="group border-b">
     <summary class="w-full outline-none rounded-md focus-visible:ring-ring/50 focus-visible:ring-[3px]">
       <h3 class="flex flex-1 items-center justify-between gap-4 py-4 text-sm font-medium hover:underline">
@@ -496,6 +499,7 @@ git commit -m "fix: {{$f.Title}}"</pre>
       </form>
     </section>
   </details>
+  {{end}}
 
   <details open class="group border-b">
     <summary class="w-full outline-none rounded-md focus-visible:ring-ring/50 focus-visible:ring-[3px]">
@@ -532,6 +536,7 @@ git commit -m "fix: {{$f.Title}}"</pre>
       </h3>
     </summary>
     <section class="pb-4 grid gap-3">
+      {{if not $.Sharing}}
       <form method="post" action="/findings/{{$f.ID}}/reviews" class="form grid gap-2">
         <div class="flex gap-2">
           <select class="input" name="verdict" required>
@@ -551,6 +556,7 @@ git commit -m "fix: {{$f.Title}}"</pre>
           <button type="submit" class="btn-sm">Record review</button>
         </div>
       </form>
+      {{end}}
       <ul class="grid gap-2">
       {{range .Reviews}}
         <li class="border rounded p-3 text-sm">
@@ -580,6 +586,7 @@ git commit -m "fix: {{$f.Title}}"</pre>
       </h3>
     </summary>
     <section class="pb-4 grid gap-3">
+      {{if not $.Sharing}}
       <form method="post" action="/findings/{{$f.ID}}/communications" class="form grid grid-cols-4 gap-2">
         <select class="input" name="channel">
           {{range (list "email" "ghsa" "issue" "pr" "direct" "registry")}}<option value="{{.}}">{{.}}</option>{{end}}
@@ -601,6 +608,7 @@ git commit -m "fix: {{$f.Title}}"</pre>
           <button type="submit" class="btn-sm">Log communication</button>
         </div>
       </form>
+      {{end}}
       <ul class="grid gap-2">
       {{range .Communications}}
         <li class="border rounded p-3 text-sm">
@@ -627,6 +635,7 @@ git commit -m "fix: {{$f.Title}}"</pre>
       </h3>
     </summary>
     <section class="pb-4 grid gap-3">
+      {{if not $.Sharing}}
       <form method="post" action="/findings/{{$f.ID}}/references" class="form grid grid-cols-3 gap-2">
         <input class="input col-span-2" name="url" placeholder="https://..." required>
         <input class="input" name="tags" placeholder="tags: issue, pr, cve, ghsa, patch">
@@ -635,6 +644,7 @@ git commit -m "fix: {{$f.Title}}"</pre>
           <button type="submit" class="btn-sm">Add reference</button>
         </div>
       </form>
+      {{end}}
       <ul class="grid gap-2">
       {{range .References}}
         <li class="border rounded p-3 text-sm">
@@ -651,6 +661,7 @@ git commit -m "fix: {{$f.Title}}"</pre>
     </section>
   </details>
 
+  {{if not $.Sharing}}
   <details class="group border-b">
     <summary class="w-full outline-none rounded-md focus-visible:ring-ring/50 focus-visible:ring-[3px]">
       <h3 class="flex flex-1 items-center justify-between gap-4 py-4 text-sm font-medium hover:underline">
@@ -676,6 +687,7 @@ git commit -m "fix: {{$f.Title}}"</pre>
       </form>
     </section>
   </details>
+  {{end}}
 
   <details class="group border-b">
     <summary class="w-full outline-none rounded-md focus-visible:ring-ring/50 focus-visible:ring-[3px]">
