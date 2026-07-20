@@ -59,8 +59,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 // callback completes the handshake: it validates the state cookie, exchanges
-// the code for a token, resolves the visitor's maintained repositories, and
-// seals a session cookie.
+// the code for a token, fetches the visitor's GitHub identity, and seals a
+// session cookie containing the token for real-time repo checks on each request.
 func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 	st, err := r.Cookie(stateCookie)
 	if err != nil || st.Value == "" || st.Value != r.URL.Query().Get("state") {
@@ -87,22 +87,10 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not read GitHub identity", http.StatusBadGateway)
 		return
 	}
-	repos, err := fetchMaintainedRepos(r.Context(), tok.AccessToken)
-	if err != nil {
-		s.log.Warn("fetch maintained repos failed", "login", login, "err", err)
-		http.Error(w, "could not read GitHub repositories", http.StatusBadGateway)
-		return
-	}
-	scope, err := resolveScope(r.Context(), s.db, repos)
-	if err != nil {
-		s.log.Error("resolve scope failed", "login", login, "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
 
 	sealed, err := s.cfg.seal(session{
 		Login:     login,
-		RepoIDs:   idsSlice(scope.RepoIDs),
+		Token:     tok.AccessToken,
 		ExpiresAt: time.Now().Add(sessionTTL).Unix(),
 	})
 	if err != nil {
@@ -118,7 +106,7 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(sessionTTL.Seconds()),
 	})
-	s.log.Info("sharing login", "login", login, "repos", len(scope.RepoIDs))
+	s.log.Info("sharing login", "login", login)
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -151,10 +139,3 @@ func clearCookie(w http.ResponseWriter, name string) {
 	})
 }
 
-func idsSlice(m map[uint]struct{}) []uint {
-	ids := make([]uint, 0, len(m))
-	for id := range m {
-		ids = append(ids, id)
-	}
-	return ids
-}

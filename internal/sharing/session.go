@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// session is the authenticated state sealed into the visitor's cookie. It
-// deliberately does NOT store the GitHub OAuth token: the maintained-repo set
-// is resolved once at login and cached here, and the short TTL forces a fresh
-// GitHub permission check (re-login) rather than keeping a token at rest.
+// session is the authenticated state sealed into the visitor's cookie. The
+// GitHub OAuth token is stored here (encrypted) so the portal can re-check the
+// visitor's maintained repositories on every request for real-time tracking.
+// The short TTL bounds how long a stolen token could be replayed.
 type session struct {
 	Login     string `json:"l"`
-	RepoIDs   []uint `json:"r"`
+	Token     string `json:"t"` // GitHub OAuth access token
 	ExpiresAt int64  `json:"e"` // unix seconds
 }
 

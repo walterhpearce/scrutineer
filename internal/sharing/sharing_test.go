@@ -42,7 +42,7 @@ func openTestDB(t *testing.T) *gorm.DB {
 
 func TestSessionRoundTrip(t *testing.T) {
 	c := testConfig()
-	in := session{Login: "octocat", RepoIDs: []uint{1, 2, 3}, ExpiresAt: time.Now().Add(time.Hour).Unix()}
+	in := session{Login: "octocat", Token: "ghp_test123", ExpiresAt: time.Now().Add(time.Hour).Unix()}
 	sealed, err := c.seal(in)
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +51,7 @@ func TestSessionRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	if out.Login != in.Login || len(out.RepoIDs) != 3 {
+	if out.Login != in.Login || out.Token != in.Token {
 		t.Fatalf("round-trip mismatch: %+v", out)
 	}
 }

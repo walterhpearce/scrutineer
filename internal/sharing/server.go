@@ -110,8 +110,11 @@ func (s *Server) secure(next http.Handler) http.Handler {
 	})
 }
 
-// requireAuth admits only requests with a valid session, attaching the
-// authenticated user and the read-only web.ViewScope the reused handlers read.
+// requireAuth admits only requests with a valid session. On every request it
+// re-fetches the visitor's maintained repositories from GitHub so that changes
+// in repo access are reflected immediately without waiting for the session to
+// expire. If the GitHub fetch fails (e.g. the token was revoked) the session
+// cookie is cleared and the visitor is redirected to login.
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(sessionCookie)
@@ -125,12 +128,21 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			s.redirectToLogin(w, r)
 			return
 		}
-		ids := make(map[uint]struct{}, len(sess.RepoIDs))
-		for _, id := range sess.RepoIDs {
-			ids[id] = struct{}{}
+		repos, err := fetchMaintainedRepos(r.Context(), sess.Token)
+		if err != nil {
+			s.log.Warn("fetch maintained repos failed", "login", sess.Login, "err", err)
+			clearCookie(w, sessionCookie)
+			s.redirectToLogin(w, r)
+			return
 		}
-		ctx := context.WithValue(r.Context(), userKey{}, &user{Login: sess.Login, RepoIDs: ids})
-		ctx = web.WithViewScope(ctx, web.ViewScope{RepoIDs: ids, ReadOnly: true})
+		scope, err := resolveScope(r.Context(), s.db, repos)
+		if err != nil {
+			s.log.Error("resolve scope failed", "login", sess.Login, "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		ctx := context.WithValue(r.Context(), userKey{}, &user{Login: sess.Login, RepoIDs: scope.RepoIDs})
+		ctx = web.WithViewScope(ctx, web.ViewScope{RepoIDs: scope.RepoIDs, ReadOnly: true})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
