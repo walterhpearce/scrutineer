@@ -70,6 +70,7 @@
     <form method="post" action="/findings/{{$id}}/status" hx-swap="none"
           class="flex items-center gap-2 shrink-0">
       {{if eq $s "new"}}
+        {{if not .Sharing}}
         {{if .VerifyInFlight}}
           <button type="button" class="btn" disabled title="A verify scan is already queued or running for this finding">
             <i data-lucide="loader-circle" class="animate-spin"></i> Verify in progress
@@ -79,6 +80,7 @@
                   hx-post="/findings/{{$id}}/verify">
             <i data-lucide="shield-check"></i> Verify
           </button>
+        {{end}}
         {{end}}
         <button type="submit" name="status" value="triaged" class="btn-outline"
                 hx-post="/findings/{{$id}}/status">
@@ -100,6 +102,7 @@
         </button>
 
       {{else if eq $s "triaged"}}
+        {{if not .Sharing}}
         <button type="submit" class="btn" formaction="/findings/{{$id}}/disclose"
                 hx-post="/findings/{{$id}}/disclose">
           <i data-lucide="file-pen"></i> Draft disclosure
@@ -112,6 +115,7 @@
                 hx-post="/findings/{{$id}}/mitigate">
           <i data-lucide="shield"></i> Draft mitigation
         </button>
+        {{end}}
         <button type="submit" name="status" value="ready" class="btn-outline"
                 hx-post="/findings/{{$id}}/status">
           Mark ready
@@ -122,7 +126,7 @@
         </button>
 
       {{else if eq $s "ready"}}
-        {{if not (or (eq .Severity "High") (eq .Severity "Critical"))}}
+        {{if and (not .Sharing) (not (or (eq .Severity "High") (eq .Severity "Critical")))}}
           <button type="submit" class="btn-outline" formaction="/findings/{{$id}}/public-issue"
                   hx-post="/findings/{{$id}}/public-issue">
             <i data-lucide="message-square-plus"></i> File public issue
@@ -165,14 +169,17 @@
       <i data-lucide="bug" class="size-3.5"></i>
       <span>Exploitation status</span>
       {{if eq .ExploitedInWild "yes"}}<span class="badge-destructive">yes</span>{{else if eq .ExploitedInWild "no"}}<span class="badge-outline">no</span>{{else}}<span>unknown</span>{{end}}
+      {{if not .Sharing}}
       <button type="button" data-dialog="exploitation-{{$id}}" class="btn-sm-outline ml-auto">
         <i data-lucide="pencil"></i> Edit
       </button>
+      {{end}}
     </div>
     {{if .ExploitedInWildEvidence}}<p class="pl-6">{{.ExploitedInWildEvidence}}</p>{{end}}
   </section>
 </div>
 
+{{if not .Sharing}}
 <dialog id="exploitation-{{$id}}" class="dialog">
   <article>
     <header>
@@ -200,4 +207,5 @@
     </form>
   </article>
 </dialog>
+{{end}}
 {{end}}

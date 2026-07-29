@@ -672,7 +672,7 @@ func TestDistinctLanguages_splitsJoinedColumn(t *testing.T) {
 	s.DB.Create(&db.Repository{URL: "https://x/4", Name: "d", Languages: "Go, Python"})
 	s.DB.Create(&db.Repository{URL: "https://x/5", Name: "e", Languages: ""})
 
-	got := distinctLanguages(s.DB)
+	got := distinctLanguages(s.DB, localReq("GET", "/"))
 	want := []string{"Go", "Java", "Kotlin", "Prolog", "Python"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("got %v, want %v", got, want)
