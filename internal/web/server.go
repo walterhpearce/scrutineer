@@ -715,9 +715,14 @@ type repoRow struct {
 // written by the metadata/repo-overview parsers, so the dropdown has to
 // split it rather than DISTINCT the column, otherwise every combination
 // (and ordering) of languages becomes its own filter option.
-func distinctLanguages(gdb *gorm.DB) []string {
+func distinctLanguages(gdb *gorm.DB, r *http.Request) []string {
 	var raw []string
-	gdb.Model(&db.Repository{}).Where("languages != ''").Distinct("languages").Pluck("languages", &raw)
+	q := gdb.Model(&db.Repository{}).Where("languages != ''")
+	// Restrict the facet to the request's allow-listed repositories (the
+	// sharing portal) so it does not reveal languages across repos the visitor
+	// cannot see; a no-op for the local operator.
+	q = applyRepoScope(q, r, "id")
+	q.Distinct("languages").Pluck("languages", &raw)
 	seen := map[string]struct{}{}
 	for _, joined := range raw {
 		for l := range strings.SplitSeq(joined, ",") {
@@ -900,7 +905,7 @@ func (s *Server) repoList(w http.ResponseWriter, r *http.Request) {
 			Branches:  branchesByRepo[repo.ID],
 		})
 	}
-	languages := distinctLanguages(s.DB)
+	languages := distinctLanguages(s.DB, r)
 
 	data := map[string]any{
 		"Rows": rows, "Page": page, "Language": lang, "Sort": sort, "Languages": languages,
@@ -1206,7 +1211,27 @@ func findingIndexWhereSQL(r *http.Request, includeScanners, includeMissed bool) 
 		where = append(where, "(title LIKE ? OR location LIKE ? OR cwe LIKE ? OR cve_id LIKE ? OR ghsa_id LIKE ? OR affected LIKE ?)")
 		args = append(args, like, like, like, like, like, like)
 	}
+	// Restrict to the request's allow-listed repositories when a view scope is
+	// set (the sharing portal), mirroring applyRepoScope for this raw-SQL count
+	// path so the toggle badges do not count findings across unscoped repos.
+	if clause, scopeArgs := repoScopeSQL(r); clause != "" {
+		where = append(where, clause)
+		args = append(args, scopeArgs...)
+	}
 	return where, args
+}
+
+// repoScopeSQL returns a raw WHERE fragment and its bind args restricting a
+// findings query to the request's view scope, or ("", nil) when no scope is
+// set. It mirrors applyRepoScope for code paths that build SQL by hand instead
+// of chaining a *gorm.DB. An empty scope yields "repository_id IN (NULL)",
+// matching nothing — the correct behaviour for a maintainer with no repos.
+func repoScopeSQL(r *http.Request) (string, []any) {
+	sc, ok := viewScopeFrom(r)
+	if !ok {
+		return "", nil
+	}
+	return "repository_id IN ?", []any{sc.scopeIDs()}
 }
 
 func applyFindingStatusFilter(q *gorm.DB, status string) *gorm.DB {

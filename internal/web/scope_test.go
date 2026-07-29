@@ -139,3 +139,72 @@ func TestViewScope_emptyScopeMatchesNothing(t *testing.T) {
 		t.Errorf("empty scope leaked a finding")
 	}
 }
+
+// seedScannerFinding creates a repo with one scanner-skill (non-deep-dive)
+// finding, which is what the /findings "scanner" badge counts.
+func seedScannerFinding(t *testing.T, s *Server, url, name string) uint {
+	t.Helper()
+	repo := db.Repository{URL: url, Name: name}
+	if err := s.DB.Create(&repo).Error; err != nil {
+		t.Fatal(err)
+	}
+	scan := db.Scan{RepositoryID: repo.ID, Kind: "skill", Status: db.ScanDone, SkillName: "zizmor"}
+	if err := s.DB.Create(&scan).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB.Create(&db.Finding{ScanID: scan.ID, RepositoryID: repo.ID,
+		Title: "scanner " + name, Severity: "Low", Status: db.FindingNew}).Error; err != nil {
+		t.Fatal(err)
+	}
+	return repo.ID
+}
+
+// TestViewScope_findingToggleCountsRespectScope confirms the /findings badge
+// counts (built via the raw-SQL findingIndexWhereSQL path) are restricted to
+// the visitor's repositories, not counted across the whole dataset.
+func TestViewScope_findingToggleCountsRespectScope(t *testing.T) {
+	s, done := newTestServer(t)
+	defer done()
+	a := seedScannerFinding(t, s, "https://x/a", "a")
+	seedScannerFinding(t, s, "https://x/b", "b")
+
+	// No scope (local operator): both repos' scanner findings counted.
+	if _, scanner := s.findingToggleCounts(localReq("GET", "/findings"), false); scanner != 2 {
+		t.Fatalf("unscoped scannerTotal = %d, want 2", scanner)
+	}
+	// Scoped to repo a: repo b's finding must not be counted.
+	ra := localReq("GET", "/findings")
+	ra = ra.WithContext(WithViewScope(ra.Context(), ViewScope{RepoIDs: map[uint]struct{}{a: {}}, ReadOnly: true}))
+	if _, scanner := s.findingToggleCounts(ra, false); scanner != 1 {
+		t.Errorf("scoped scannerTotal = %d, want 1 (repo b leaked)", scanner)
+	}
+	// Empty scope: nothing counted.
+	re := localReq("GET", "/findings")
+	re = re.WithContext(WithViewScope(re.Context(), ViewScope{RepoIDs: map[uint]struct{}{}, ReadOnly: true}))
+	if _, scanner := s.findingToggleCounts(re, false); scanner != 0 {
+		t.Errorf("empty-scope scannerTotal = %d, want 0", scanner)
+	}
+}
+
+// TestViewScope_distinctLanguagesRespectScope confirms the language facet on the
+// repo list only reveals languages from repositories the visitor can see.
+func TestViewScope_distinctLanguagesRespectScope(t *testing.T) {
+	s, done := newTestServer(t)
+	defer done()
+	a := db.Repository{URL: "https://x/la", Name: "la", Languages: "Go, Python"}
+	b := db.Repository{URL: "https://x/lb", Name: "lb", Languages: "Rust, Kotlin"}
+	if err := s.DB.Create(&a).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB.Create(&b).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	r := localReq("GET", "/")
+	r = r.WithContext(WithViewScope(r.Context(), ViewScope{RepoIDs: map[uint]struct{}{a.ID: {}}, ReadOnly: true}))
+	got := distinctLanguages(s.DB, r)
+	want := []string{"Go", "Python"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("scoped languages = %v, want %v (repo b's Rust/Kotlin leaked)", got, want)
+	}
+}
