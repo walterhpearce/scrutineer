@@ -151,6 +151,38 @@ type Config struct {
 	// hash match. Required when FederationSalt is set: startup refuses a
 	// salt without a contact.
 	FederationContact string `yaml:"federation_contact"`
+	// Sharing holds settings specific to the external maintainer portal
+	// (cmd/sharing). It is optional; unset values fall back to the matching
+	// root config, so a deployment that runs the portal against the same
+	// database as the main app needs no sharing block at all.
+	Sharing SharingConfig `yaml:"sharing"`
+}
+
+// SharingConfig holds settings specific to the external maintainer portal
+// (cmd/sharing).
+type SharingConfig struct {
+	// Database optionally points the sharing portal at a different database
+	// connection than the main app — e.g. a read replica or a least-privilege
+	// role dedicated to the portal. Its shape mirrors the root `database`
+	// block, and unset fields inherit the root database config (see
+	// Config.SharingDatabase), so setting only `dsn` reuses the root driver.
+	Database DatabaseConfig `yaml:"database"`
+}
+
+// SharingDatabase returns the database configuration the sharing portal
+// (cmd/sharing) should connect with: the root database config with any
+// sharing-specific `sharing.database` values overlaid on top. This lets the
+// portal default to the main database yet be pointed at its own DSN (for
+// example a separate least-privilege role) without duplicating the whole block.
+func (c *Config) SharingDatabase() DatabaseConfig {
+	d := c.Database
+	if c.Sharing.Database.Driver != "" {
+		d.Driver = c.Sharing.Database.Driver
+	}
+	if c.Sharing.Database.DSN != "" {
+		d.DSN = c.Sharing.Database.DSN
+	}
+	return d
 }
 
 // DatabaseConfig selects and locates the database backend. Driver is
@@ -320,6 +352,11 @@ func Load(path string) (*Config, error) {
 	}
 	if err := ValidateDatabase(c.Database); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	// Validate the portal's resolved database (root overlaid with any
+	// sharing.database overrides) so a bad sharing block fails fast too.
+	if err := ValidateDatabase(c.SharingDatabase()); err != nil {
+		return nil, fmt.Errorf("parse config %s: sharing.%w", path, err)
 	}
 	return &c, nil
 }
